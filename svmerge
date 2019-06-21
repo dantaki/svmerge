@@ -63,9 +63,13 @@ system("rm -fr $tmp_dir");
 
 # two pass method ensures only unique positions are merged
 undef my %ovr;
+undef my %chrom;
 foreach my $k1 ( keys %int){
+	my($chrom,$s,$e) = split /\t/, $k1;
+	$chrom{$chrom}++;
+	
 	foreach my $k2 (keys %{$int{$k1}}){
-		push @{$ovr{$k1}},$k2; # hash of arrays
+		push @{$ovr{$chrom}{$k1}},$k2; # hash of arrays
 	}
 }
 
@@ -76,15 +80,56 @@ $obed =~ s/\.bed/\.svmerged\.bed/;
 $obed =~ s/\.gz$//;
 open OUT, ">$obed";
 
-foreach my $k1 (sort { scalar(@{$ovr{$b}}) <=> scalar(@{$ovr{$a}}) } keys %ovr) {
-	next if(exists $merged{$k1});
-	foreach my $k2 (@{$ovr{$k1}}){
-		next if(exists $merged{$k2});
-		print OUT "$k1\t$k2\n";
-		$merged{$k2}++;
-	}
-	$merged{$k1}++;
-} close OUT; 
+# keys are the number of candidate consensus svs
+foreach my $chrom (keys %chrom){
+
+	my $keys = keys %{$ovr{$chrom}};
+
+	#reporter(">>> $chrom\: $keys candidate consensus SVs to merge <<<");
+
+	do {
+		#reporter(">>> $keys candidate consensus SVs to merge <<<");
+
+		undef my %to_delete;
+		# always start with the SV with the most number of intesects
+		foreach my $k1 (sort { 		scalar(@{$ovr{$chrom}{$b}}) 
+								<=> scalar(@{$ovr{$chrom}{$a}}) } keys %{$ovr{$chrom}}) {
+		
+			# delete the consensus sv at a later step
+			$to_delete{$k1}++;
+		
+			foreach my $k2 (@{$ovr{$chrom}{$k1}}){
+				print OUT "$k1\t$k2\n";
+				# delete the merged SVs 
+				$to_delete{$k2}++;
+			}
+			# only process one SV at a time in the do/while loop
+			last;
+		}
+
+		# iterate through the list of overlaps again
+		# remove svs that have been merged above
+		foreach my $k1 (keys %{$ovr{$chrom}}){
+			undef my @new;
+			foreach my $k2 (@{$ovr{$chrom}{$k1}}){
+				push @new, $k2 if(! exists $to_delete{$k2});
+			}
+
+			# re-define the array of overlaps with SVs that have
+			# yet to be merged
+			@{$ovr{$chrom}{$k1}}=@new;
+		}
+
+		# delete candidate consensus SVs that have already been merged
+		foreach my $k1 (keys %to_delete){
+			delete $ovr{$chrom}{$k1} if(exists $ovr{$chrom}{$k1});
+		}
+
+		# get the number of remaining consensus svs
+		$keys = keys %{$ovr{$chrom}};
+
+	} until($keys==0);
+}
 
 reporter(">>> output ---> $obed <<<");
 
