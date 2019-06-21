@@ -20,7 +20,7 @@ Notes:
 
     svmerge is written for UNIX systems with
 
-    This process will create tempory files in the current working directory. 
+    This process will create temporary files in the current working directory. 
     Output will be in the form of a chain file linking the consensus SV to 
     the merged position.
 
@@ -42,56 +42,52 @@ my $tmp_bed = "${tmp_dir}tmp.bed";
 system("mkdir -p $tmp_dir");
 
 # write positions to temp bed file
-my $cmd = "less $bed | cut -f 1-3 >$tmp_bed";
-$cmd = "gunzip -c $bed | cut -f 1-3 >$tmp_bed" if($bed =~ /\.gz$/);
+my $cmd = "less $bed | cut -f 1-3 | sort -k1,1 -k2,2n | uniq >$tmp_bed";
+$cmd = "gunzip -c $bed | cut -f 1-3 | sort -k1,1 -k2,2n | uniq >$tmp_bed" if($bed =~ /\.gz$/);
 system($cmd);
 
 # intersect SVs
-undef my %int;
+undef my %ovr;
+undef my %chrom;
 open IN, "bedtools intersect -a $tmp_bed -b $tmp_bed -F $ovr -f $ovr -wao |";
 while(<IN>){
 	chomp;
 	my @r = split /\t/, $_;
 	my $k1 = join "\t", @r[0 .. 2];
 	my $k2 = join "\t", @r[3 .. 5];
-	$int{$k1}{$k2}++;
+	$chrom{$r[0]}++;
+	push @{$ovr{$r[0]}{$k1}},$k2;
 }close IN;
-
-reporter(">>> finished intersecting bed file <<<");
 
 system("rm -fr $tmp_dir");
 
-# two pass method ensures only unique positions are merged
-undef my %ovr;
-undef my %chrom;
-foreach my $k1 ( keys %int){
-	my($chrom,$s,$e) = split /\t/, $k1;
-	$chrom{$chrom}++;
-	
-	foreach my $k2 (keys %{$int{$k1}}){
-		push @{$ovr{$chrom}{$k1}},$k2; # hash of arrays
-	}
-}
+reporter(">>> finished intersecting bed file <<<");
 
-# merge according to most overlapped
-undef my %merged;
 my $obed = $bed; 
 $obed =~ s/\.bed/\.svmerged\.bed/;
 $obed =~ s/\.gz$//;
 open OUT, ">$obed";
 
-# keys are the number of candidate consensus svs
+# merge according to most overlapped
 foreach my $chrom (keys %chrom){
+	
+	# for single overlaps, print out the SV
+	# and remove it from the overlaps hash
+	# to avoid unnecessary looping 
+	foreach my $k1 (keys %{$ovr{$chrom}}){
+		if(scalar(@{$ovr{$chrom}{$k1}})==1){
+			print OUT "$k1\t$k1\n";
+			delete $ovr{$chrom}{$k1};
+		}
+	}
 
+	# keys are the number of candidate consensus svs
 	my $keys = keys %{$ovr{$chrom}};
 
-	#reporter(">>> $chrom\: $keys candidate consensus SVs to merge <<<");
-
 	do {
-		#reporter(">>> $keys candidate consensus SVs to merge <<<");
 
 		undef my %to_delete;
-		# always start with the SV with the most number of intesects
+		# always start with the SV with the most number of intersects
 		foreach my $k1 (sort { 		scalar(@{$ovr{$chrom}{$b}}) 
 								<=> scalar(@{$ovr{$chrom}{$a}}) } keys %{$ovr{$chrom}}) {
 		
