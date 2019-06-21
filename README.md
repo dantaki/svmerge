@@ -45,13 +45,14 @@ Notes:
 
     svmerge requires bedtools to be in the environment path.
 
-    svmerge is written for UNIX systems with
+    svmerge is written for UNIX systems
 
-    This process will create temporary files in the current working directory. 
+    svmerge will create temporary files in the current working directory. 
+    
     Output will be in the form of a chain file linking the consensus SV to 
     the merged position.
-
-    bed_file_svmerged.bed: consensus SV ---> merged SV 
+         
+         bed_file_svmerged.bed: consensus SV ---> merged SV 
 
 Author:
     Danny Antaki, <dantaki at ucsd dot edu>
