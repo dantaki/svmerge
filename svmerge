@@ -79,6 +79,7 @@ open OUT, ">$obed";
 foreach my $k1 (sort { scalar(@{$ovr{$b}}) <=> scalar(@{$ovr{$a}}) } keys %ovr) {
 	next if(exists $merged{$k1});
 	foreach my $k2 (@{$ovr{$k1}}){
+		next if(exists $merged{$k2});
 		print OUT "$k1\t$k2\n";
 		$merged{$k2}++;
 	}
