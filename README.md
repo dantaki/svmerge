@@ -47,7 +47,7 @@ Notes:
 
     svmerge is written for UNIX systems with
 
-    This process will create tempory files in the current working directory. 
+    This process will create temporary files in the current working directory. 
     Output will be in the form of a chain file linking the consensus SV to 
     the merged position.
 
