@@ -1,0 +1,94 @@
+#!/usr/bin/perl
+use strict; use warnings;
+my $usage='
+Tool:     svmerge 
+About:    Merge SVs according to reciprocal overlap
+
+Usage:    svmerge <bed file> [overlap]
+
+Required Arguments:
+    bed file        bed file of SVs to merge. Can be bgzipped
+
+Optional Arguments:
+    overlap         minimum reciprocal overlap requirement [default 0.8]
+
+Notes:
+    svmerge takes a bed file as input and merges SVs according to a defined
+    minimum reciprocal overlap. 
+
+    svmerge requires bedtools to be in the environment path.
+
+    svmerge is written for UNIX systems with
+
+    This process will create tempory files in the current working directory. 
+    Output will be in the form of a chain file linking the consensus SV to 
+    the merged position.
+
+    bed_file_svmerged.bed: consensus SV ---> merged SV 
+
+Author:
+    Danny Antaki, <dantaki at ucsd dot edu>
+';
+
+my $bed = $ARGV[0];
+die "FATAL ERROR: bed file required.\n$usage\n"if(! defined $bed);
+my $ovr= $ARGV[1];
+$ovr=0.8 if(! defined $ovr);
+die "FATAL ERROR: overlap must be a float between 0 and 1.\n$usage\n" if($ovr <=0 || $ovr > 1);
+
+# tmp dir
+my $tmp_dir = "svmerge_tmp/";
+my $tmp_bed = "${tmp_dir}tmp.bed";
+system("mkdir -p $tmp_dir");
+
+# write positions to temp bed file
+my $cmd = "less $bed | cut -f 1-3 >$tmp_bed";
+$cmd = "gunzip -c $bed | cut -f 1-3 >$tmp_bed" if($bed =~ /\.gz$/);
+system($cmd);
+
+# intersect SVs
+undef my %int;
+open IN, "bedtools intersect -a $tmp_bed -b $tmp_bed -F $ovr -f $ovr -wao |";
+while(<IN>){
+	chomp;
+	my @r = split /\t/, $_;
+	my $k1 = join "\t", @r[0 .. 2];
+	my $k2 = join "\t", @r[3 .. 5];
+	$int{$k1}{$k2}++;
+}close IN;
+
+reporter(">>> finished intersecting bed file <<<");
+
+system("rm -fr $tmp_dir");
+
+# two pass method ensures only unique positions are merged
+undef my %ovr;
+foreach my $k1 ( keys %int){
+	foreach my $k2 (keys %{$int{$k1}}){
+		push @{$ovr{$k1}},$k2; # hash of arrays
+	}
+}
+
+# merge according to most overlapped
+undef my %merged;
+my $obed = $bed; 
+$obed =~ s/\.bed/\.svmerged\.bed/;
+$obed =~ s/\.gz$//;
+open OUT, ">$obed";
+
+foreach my $k1 (sort { scalar(@{$ovr{$b}}) <=> scalar(@{$ovr{$a}}) } keys %ovr) {
+	next if(exists $merged{$k1});
+	foreach my $k2 (@{$ovr{$k1}}){
+		print OUT "$k1\t$k2\n";
+		$merged{$k2}++;
+	}
+	$merged{$k1}++;
+} close OUT; 
+
+reporter(">>> output ---> $obed <<<");
+
+##############
+sub reporter {
+	my $s = shift @_;
+	warn "\n    $s\n";
+}
